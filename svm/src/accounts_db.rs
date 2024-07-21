@@ -59,7 +59,7 @@ where
 }
 
 #[derive(Default)]
-pub(crate) struct AccountsDb {
+pub struct AccountsDb {
     inner: HashMap<Pubkey, AccountSharedData>,
     pub(crate) programs_cache: ProgramCacheForTxBatch,
     pub(crate) sysvar_cache: SysvarCache,
