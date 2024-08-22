@@ -12,6 +12,7 @@ use {
         signature::{Keypair, Signer},
         transaction::{Transaction, TransactionError},
     },
+    std::collections::HashMap,
 };
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -45,7 +46,7 @@ struct TestContext {
 
 fn setup_test_context() -> TestContext {
     let payer = Keypair::new();
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     svm.airdrop(&payer.pubkey(), 1_000_000_000).unwrap();
     TestContext { svm, payer }
 }

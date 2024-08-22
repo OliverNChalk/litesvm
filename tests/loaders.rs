@@ -1,4 +1,6 @@
 #![allow(clippy::result_large_err)]
+use std::collections::HashMap;
+
 use litesvm::{types::FailedTransactionMetadata, LiteSVM};
 use solana_program::{
     instruction::{AccountMeta, Instruction},
@@ -128,7 +130,7 @@ fn deploy_upgradeable_program(
 
 #[test]
 fn hello_world_with_store() {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
 
     let payer = Keypair::new();
     let program_bytes = HELLO_WORLD_BYTES;
@@ -157,7 +159,7 @@ fn hello_world_with_store() {
 
 #[test_log::test]
 fn hello_world_with_deploy_upgradeable() {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
 
     let payer_kp = Keypair::new();
     let payer_pk = payer_kp.pubkey();

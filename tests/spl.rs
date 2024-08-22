@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use litesvm::LiteSVM;
 use solana_sdk::{
     program_pack::Pack, rent::Rent, signature::Keypair, signer::Signer, system_instruction,
@@ -6,7 +8,7 @@ use solana_sdk::{
 
 #[test]
 fn spl_token() {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let payer_kp = Keypair::new();
     let payer_pk = payer_kp.pubkey();
     let mint_kp = Keypair::new();

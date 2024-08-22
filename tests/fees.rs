@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use litesvm::LiteSVM;
 use solana_program::{message::Message, pubkey::Pubkey, system_instruction::transfer};
@@ -17,7 +17,7 @@ fn test_insufficient_funds_for_rent() {
     let from = from_keypair.pubkey();
     let to = Pubkey::new_unique();
 
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
 
     svm.airdrop(&from, svm.get_sysvar::<Rent>().minimum_balance(0))
         .unwrap();
@@ -42,7 +42,7 @@ fn test_fees_failed_transaction() {
     let from_keypair = Keypair::new();
     let from = from_keypair.pubkey();
 
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let program_id = pubkey!("HvrRMSshMx3itvsyWDnWg2E3cy5h57iMaR7oVxSZJDSA");
     let mut so_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     so_path.push("test_programs/target/deploy/failure.so");

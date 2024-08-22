@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use litesvm::LiteSVM;
 use solana_program::{
     message::Message,
@@ -12,7 +14,7 @@ fn system_transfer() {
     let from = from_keypair.pubkey();
     let to = Pubkey::new_unique();
 
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let expected_fee = 5000;
     svm.airdrop(&from, 100 + expected_fee).unwrap();
 
@@ -38,7 +40,7 @@ fn system_create_account() {
     let new_account = Keypair::new();
     let from = from_keypair.pubkey();
 
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let expected_fee = 5000 * 2; // two signers
     let space = 10;
     let rent_amount = svm.minimum_balance_for_rent_exemption(space);

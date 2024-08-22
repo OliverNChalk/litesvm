@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use litesvm::LiteSVM;
@@ -34,7 +34,7 @@ fn make_tx(
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let mut svm = LiteSVM::new()
+    let mut svm = LiteSVM::new(HashMap::default())
         .with_blockhash_check(false)
         .with_sigverify(false)
         .with_transaction_history(0);

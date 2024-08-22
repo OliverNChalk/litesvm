@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use litesvm::LiteSVM;
 use solana_program::{
     instruction::InstructionError, message::Message, pubkey::Pubkey, system_instruction::transfer,
@@ -17,7 +19,7 @@ fn test_set_compute_budget() {
     let from = from_keypair.pubkey();
     let to = Pubkey::new_unique();
 
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let tx_fee = 5000;
     svm.airdrop(&from, tx_fee + 100).unwrap();
     // need to set the low compute budget after the airdrop tx
@@ -46,7 +48,7 @@ fn test_set_compute_unit_limit() {
     let from = from_keypair.pubkey();
     let to = Pubkey::new_unique();
 
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let tx_fee = 5000;
 
     svm.airdrop(&from, tx_fee + 100).unwrap();

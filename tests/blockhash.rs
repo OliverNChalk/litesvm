@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use litesvm::LiteSVM;
 use solana_program::{message::Message, pubkey::Pubkey, system_instruction::transfer};
 use solana_sdk::{
@@ -36,7 +38,7 @@ fn test_invalid_blockhash() {
     let from = from_keypair.pubkey();
     let to = Pubkey::new_unique();
 
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default()).with_sysvars();
 
     svm.airdrop(&from, svm.get_sysvar::<Rent>().minimum_balance(0))
         .unwrap();
@@ -58,7 +60,7 @@ fn test_durable_nonce() {
     let to = Pubkey::new_unique();
     let nonce_kp = Keypair::new();
 
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
 
     svm.airdrop(&from, 1_000_000_000).unwrap();
     let create_nonce_ixns = solana_program::system_instruction::create_nonce_account(

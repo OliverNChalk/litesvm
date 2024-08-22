@@ -31,7 +31,10 @@ use solana_sdk::{
 use solana_system_program::{get_system_account_kind, SystemAccountKind};
 use std::{collections::HashMap, sync::Arc};
 
-use crate::error::{InvalidSysvarDataError, LiteSVMError};
+use crate::{
+    accounts_loader::AccountLoader,
+    error::{InvalidSysvarDataError, LiteSVMError},
+};
 
 const FEES_ID: Pubkey = solana_program::pubkey!("SysvarFees111111111111111111111111111111111");
 const RECENT_BLOCKHASHES_ID: Pubkey =
@@ -55,21 +58,35 @@ where
 }
 
 #[derive(Default)]
-pub struct AccountsDb {
-    inner: HashMap<Pubkey, AccountSharedData>,
+pub struct AccountsDb<A = HashMap<Pubkey, AccountSharedData>>
+where
+    A: AccountLoader,
+{
+    accounts_source: A,
     pub(crate) programs_cache: LoadedProgramsForTxBatch,
     pub(crate) sysvar_cache: SysvarCache,
 }
 
-impl AccountsDb {
+impl<A> AccountsDb<A>
+where
+    A: AccountLoader,
+{
+    pub(crate) fn new(accounts_source: A) -> Self {
+        AccountsDb {
+            accounts_source,
+            programs_cache: LoadedProgramsForTxBatch::default(),
+            sysvar_cache: SysvarCache::default(),
+        }
+    }
+
     pub(crate) fn get_account(&self, pubkey: &Pubkey) -> Option<AccountSharedData> {
-        self.inner.get(pubkey).map(|acc| acc.to_owned())
+        self.accounts_source.get(pubkey).map(|acc| acc.to_owned())
     }
 
     /// We should only use this when we know we're not touching any executable or sysvar accounts,
     /// or have already handled such cases.
     pub(crate) fn add_account_no_checks(&mut self, pubkey: Pubkey, account: AccountSharedData) {
-        self.inner.insert(pubkey, account);
+        self.accounts_source.insert(pubkey, account);
     }
 
     pub(crate) fn add_account(
@@ -167,7 +184,7 @@ impl AccountsDb {
 
     /// Skip the executable() checks for builtin accounts
     pub(crate) fn add_builtin_account(&mut self, pubkey: Pubkey, data: AccountSharedData) {
-        self.inner.insert(pubkey, data);
+        self.accounts_source.insert(pubkey, data);
     }
 
     pub(crate) fn sync_accounts(
@@ -309,7 +326,7 @@ impl AccountsDb {
         pubkey: &Pubkey,
         lamports: u64,
     ) -> solana_sdk::transaction::Result<()> {
-        match self.inner.get_mut(pubkey) {
+        match self.accounts_source.get_mut(pubkey) {
             Some(account) => {
                 let min_balance = match get_system_account_kind(account) {
                     Some(SystemAccountKind::Nonce) => self
@@ -349,7 +366,10 @@ fn into_address_loader_error(err: AddressLookupError) -> AddressLoaderError {
     }
 }
 
-impl AddressLoader for &AccountsDb {
+impl<A> AddressLoader for &AccountsDb<A>
+where
+    A: AccountLoader,
+{
     fn load_addresses(
         self,
         lookups: &[MessageAddressTableLookup],

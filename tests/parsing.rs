@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use litesvm::LiteSVM;
 use solana_address_lookup_table_program::instruction::{create_lookup_table, extend_lookup_table};
 use solana_sdk::{
@@ -6,7 +8,7 @@ use solana_sdk::{
 
 #[test]
 fn test_inner_instruction_parsing() {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let payer_kp = Keypair::new();
     let payer_pk = payer_kp.pubkey();
     svm.airdrop(&payer_pk, 1000000000).unwrap();

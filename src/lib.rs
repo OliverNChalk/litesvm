@@ -1,4 +1,5 @@
 #![allow(clippy::result_large_err)]
+use accounts_loader::AccountLoader;
 use log::error;
 
 use crate::error::LiteSVMError;
@@ -48,7 +49,7 @@ use solana_sdk::{
     transaction_context::{ExecutionRecord, IndexOfAccount, TransactionContext},
 };
 use solana_system_program::{get_system_account_kind, SystemAccountKind};
-use std::{cell::RefCell, path::Path, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
 use utils::{
     construct_instructions_account,
     inner_instructions::inner_instructions_list_from_instruction_trace,
@@ -67,6 +68,7 @@ pub mod error;
 pub mod types;
 
 mod accounts_db;
+mod accounts_loader;
 mod builtin;
 mod history;
 mod spl;
@@ -79,8 +81,11 @@ mod utils;
 #[cfg(doctest)]
 pub struct ReadmeDoctests;
 
-pub struct LiteSVM {
-    pub accounts: AccountsDb,
+pub struct LiteSVM<A = HashMap<Pubkey, AccountSharedData>>
+where
+    A: AccountLoader,
+{
+    pub accounts: AccountsDb<A>,
     airdrop_kp: Keypair,
     feature_set: Arc<FeatureSet>,
     latest_blockhash: Hash,
@@ -92,7 +97,10 @@ pub struct LiteSVM {
     fee_structure: FeeStructure,
 }
 
-impl Default for LiteSVM {
+impl<A> Default for LiteSVM<A>
+where
+    A: AccountLoader + Default,
+{
     fn default() -> Self {
         Self {
             accounts: Default::default(),
@@ -109,9 +117,27 @@ impl Default for LiteSVM {
     }
 }
 
-impl LiteSVM {
-    pub fn new() -> Self {
-        LiteSVM::default()
+impl<A> LiteSVM<A>
+where
+    A: AccountLoader,
+{
+    pub fn empty(accounts_source: A) -> Self {
+        LiteSVM {
+            accounts: AccountsDb::new(accounts_source),
+            airdrop_kp: Keypair::new(),
+            feature_set: Default::default(),
+            latest_blockhash: create_blockhash(b"genesis"),
+            log_collector: Default::default(),
+            history: TransactionHistory::new(),
+            compute_budget: None,
+            sigverify: false,
+            blockhash_check: false,
+            fee_structure: FeeStructure::default(),
+        }
+    }
+
+    pub fn new(accounts_source: A) -> Self {
+        Self::empty(accounts_source)
             .with_builtins()
             .with_lamports(1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL))
             .with_sysvars()

@@ -25,6 +25,7 @@ use {
         vote_instruction,
         vote_state::{self, VoteInit, VoteState, VoteStateVersions},
     },
+    std::collections::HashMap,
 };
 
 fn increment_vote_account_credits(
@@ -315,7 +316,7 @@ fn test_instruction_with_missing_signers(
 
 #[test]
 fn test_stake_checked_instructions() {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let accounts = Accounts::default();
     let payer = Keypair::new();
     svm.airdrop(&payer.pubkey(), 1_000_000_000_000).unwrap();
@@ -427,7 +428,7 @@ fn test_stake_checked_instructions() {
 
 #[test]
 fn test_stake_initialize() {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let accounts = Accounts::default();
     let payer = Keypair::new();
     svm.airdrop(&payer.pubkey(), 1_000_000_000_000).unwrap();
@@ -528,7 +529,7 @@ fn test_stake_initialize() {
 
 #[test]
 fn test_authorize() {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let payer = Keypair::new();
     svm.airdrop(&payer.pubkey(), 1_000_000_000_000).unwrap();
     let accounts = Accounts::default();
@@ -668,7 +669,7 @@ fn test_authorize() {
 
 #[test]
 fn test_stake_delegate() {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let accounts = Accounts::default();
     let payer = Keypair::new();
     svm.airdrop(&payer.pubkey(), 1_000_000_000_000).unwrap();

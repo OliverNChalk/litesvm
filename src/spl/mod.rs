@@ -1,8 +1,11 @@
 use solana_sdk::{bpf_loader, pubkey};
 
-use crate::LiteSVM;
+use crate::{accounts_loader::AccountLoader, LiteSVM};
 
-pub fn load_spl_programs(svm: &mut LiteSVM) {
+pub fn load_spl_programs<A>(svm: &mut LiteSVM<A>)
+where
+    A: AccountLoader,
+{
     svm.add_program(
         &bpf_loader::id(),
         pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),

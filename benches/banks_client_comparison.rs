@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use litesvm::LiteSVM;
@@ -94,7 +94,7 @@ async fn do_program_test(
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let mut svm = LiteSVM::new();
+    let mut svm = LiteSVM::new(HashMap::default());
     let payer_kp = Keypair::new();
     let payer_pk = payer_kp.pubkey();
     let program_id = Pubkey::new_unique();
