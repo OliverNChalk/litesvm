@@ -22,6 +22,7 @@ use solana_sdk::sysvar::recent_blockhashes::IterItem;
 use solana_sdk::{
     account::{Account, AccountSharedData, ReadableAccount, WritableAccount},
     bpf_loader,
+    bpf_loader_upgradeable::{self, UpgradeableLoaderState},
     clock::Clock,
     ed25519_program,
     epoch_rewards::EpochRewards,
@@ -64,11 +65,11 @@ use crate::{
     utils::{create_blockhash, rent::RentState},
 };
 
+pub mod accounts_loader;
 pub mod error;
 pub mod types;
 
 mod accounts_db;
-mod accounts_loader;
 mod builtin;
 mod history;
 mod spl;
@@ -364,7 +365,7 @@ where
         self.accounts
             .add_account(program_id, account)
             .unwrap_or_else(|err| {
-                panic!("Failed to add program; program_id={program_id}; err={err}")
+                panic!("Failed to add program; program_id={program_id}; err={err}; account={account:?}")
             });
         self.accounts
             .programs_cache

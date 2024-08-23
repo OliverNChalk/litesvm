@@ -62,7 +62,7 @@ pub struct AccountsDb<A = HashMap<Pubkey, AccountSharedData>>
 where
     A: AccountLoader,
 {
-    accounts_source: A,
+    pub loader: A,
     pub(crate) programs_cache: LoadedProgramsForTxBatch,
     pub(crate) sysvar_cache: SysvarCache,
 }
@@ -71,22 +71,22 @@ impl<A> AccountsDb<A>
 where
     A: AccountLoader,
 {
-    pub(crate) fn new(accounts_source: A) -> Self {
+    pub(crate) fn new(loader: A) -> Self {
         AccountsDb {
-            accounts_source,
+            loader,
             programs_cache: LoadedProgramsForTxBatch::default(),
             sysvar_cache: SysvarCache::default(),
         }
     }
 
     pub(crate) fn get_account(&self, pubkey: &Pubkey) -> Option<AccountSharedData> {
-        self.accounts_source.get(pubkey).map(|acc| acc.to_owned())
+        self.loader.get(pubkey)
     }
 
     /// We should only use this when we know we're not touching any executable or sysvar accounts,
     /// or have already handled such cases.
     pub(crate) fn add_account_no_checks(&mut self, pubkey: Pubkey, account: AccountSharedData) {
-        self.accounts_source.insert(pubkey, account);
+        self.loader.insert(pubkey, account);
     }
 
     pub(crate) fn add_account(
@@ -184,7 +184,7 @@ where
 
     /// Skip the executable() checks for builtin accounts
     pub(crate) fn add_builtin_account(&mut self, pubkey: Pubkey, data: AccountSharedData) {
-        self.accounts_source.insert(pubkey, data);
+        self.loader.insert(pubkey, data);
     }
 
     pub(crate) fn sync_accounts(
@@ -326,7 +326,7 @@ where
         pubkey: &Pubkey,
         lamports: u64,
     ) -> solana_sdk::transaction::Result<()> {
-        match self.accounts_source.get_mut(pubkey) {
+        match self.loader.get_mut(pubkey) {
             Some(account) => {
                 let min_balance = match get_system_account_kind(account) {
                     Some(SystemAccountKind::Nonce) => self
