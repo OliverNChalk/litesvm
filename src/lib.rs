@@ -1,8 +1,7 @@
 #![allow(clippy::result_large_err)]
 use log::error;
 use solana_compute_budget::{
-    compute_budget::ComputeBudget,
-    compute_budget_limits::ComputeBudgetLimits,
+    compute_budget::ComputeBudget, compute_budget_limits::ComputeBudgetLimits,
 };
 use solana_runtime_transaction::instructions_processor::process_compute_budget_instructions;
 use solana_svm::message_processor::MessageProcessor;
@@ -25,14 +24,13 @@ use solana_sdk::{
     account::{Account, AccountSharedData, ReadableAccount, WritableAccount},
     bpf_loader,
     clock::Clock,
+    ed25519_program,
     epoch_rewards::EpochRewards,
     epoch_schedule::EpochSchedule,
-    feature_set::{
-        remove_rounding_in_fee_calculation,
-        FeatureSet,
-    },
+    feature_set::{remove_rounding_in_fee_calculation, FeatureSet},
     fee::FeeStructure,
     hash::Hash,
+    inner_instruction::InnerInstructionsList,
     message::{Message, SanitizedMessage, VersionedMessage},
     native_loader,
     native_token::LAMPORTS_PER_SOL,
@@ -41,6 +39,7 @@ use solana_sdk::{
     pubkey::Pubkey,
     rent::Rent,
     reserved_account_keys::ReservedAccountKeys,
+    secp256k1_program,
     signature::{Keypair, Signature},
     signer::Signer,
     slot_hashes::SlotHashes,
@@ -54,7 +53,10 @@ use solana_sdk::{
 use solana_system_program::{get_system_account_kind, SystemAccountKind};
 use solana_timings::ExecuteTimings;
 use std::{cell::RefCell, path::Path, rc::Rc, sync::Arc};
-use utils::construct_instructions_account;
+use utils::{
+    construct_instructions_account,
+    inner_instructions::inner_instructions_list_from_instruction_trace,
+};
 
 use crate::{
     accounts_db::AccountsDb,
@@ -82,7 +84,7 @@ mod utils;
 pub struct ReadmeDoctests;
 
 pub struct LiteSVM {
-    accounts: AccountsDb,
+    pub accounts: AccountsDb,
     airdrop_kp: Keypair,
     feature_set: Arc<FeatureSet>,
     latest_blockhash: Hash,
@@ -305,14 +307,14 @@ impl LiteSVM {
         path: impl AsRef<Path>,
     ) -> Result<(), std::io::Error> {
         let bytes = std::fs::read(path)?;
-        self.add_program(program_id, &bytes);
+        self.add_program(&bpf_loader::id(), program_id, &bytes);
         Ok(())
     }
 
-    pub fn add_program(&mut self, program_id: Pubkey, program_bytes: &[u8]) {
+    pub fn add_program(&mut self, loader_id: &Pubkey, program_id: Pubkey, program_bytes: &[u8]) {
         let program_len = program_bytes.len();
         let lamports = self.minimum_balance_for_rent_exemption(program_len);
-        let mut account = AccountSharedData::new(lamports, program_len, &bpf_loader::id());
+        let mut account = AccountSharedData::new(lamports, program_len, loader_id);
         account.set_executable(true);
         account.set_data_from_slice(program_bytes);
         let current_slot = self
@@ -337,7 +339,11 @@ impl LiteSVM {
         )
         .unwrap_or_default();
         loaded_program.effective_slot = current_slot;
-        self.accounts.add_account(program_id, account).unwrap();
+        self.accounts
+            .add_account(program_id, account)
+            .unwrap_or_else(|err| {
+                panic!("Failed to add program; program_id={program_id}; err={err}")
+            });
         self.accounts
             .programs_cache
             .replenish(program_id, Arc::new(loaded_program));
@@ -448,6 +454,13 @@ impl LiteSVM {
                 let mut account_found = true;
                 let account = if solana_sdk::sysvar::instructions::check_id(key) {
                     construct_instructions_account(message)
+                } else if ed25519_program::check_id(key) || secp256k1_program::check_id(key) {
+                    let mut account = AccountSharedData::default();
+                    account.set_owner(native_loader::id());
+                    account.set_lamports(1);
+                    account.set_executable(true);
+
+                    account
                 } else {
                     let instruction_account = u8::try_from(i)
                         .map(|i| instruction_accounts.contains(&&i))
@@ -527,18 +540,21 @@ impl LiteSVM {
                     return Ok(account_indices);
                 }
                 if !accounts
-                .get(builtins_start_index..)
-                .ok_or(TransactionError::ProgramAccountNotFound)?
-                .iter()
-                .any(|(key, _)| key == owner_id) {
+                    .get(builtins_start_index..)
+                    .ok_or(TransactionError::ProgramAccountNotFound)?
+                    .iter()
+                    .any(|(key, _)| key == owner_id)
+                {
                     let owner_account = self.get_account(owner_id).unwrap();
                     if !native_loader::check_id(owner_account.owner()) {
-                        error!("Owner account {owner_id} is not owned by the native loader program.");
-                        return Err(TransactionError::InvalidProgramForExecution)
+                        error!(
+                            "Owner account {owner_id} is not owned by the native loader program."
+                        );
+                        return Err(TransactionError::InvalidProgramForExecution);
                     }
                     if !owner_account.executable {
                         error!("Owner account {owner_id} is not executable");
-                        return Err(TransactionError::InvalidProgramForExecution)
+                        return Err(TransactionError::InvalidProgramForExecution);
                     }
                     accounts.push((*owner_id, owner_account.into()));
                 }
@@ -761,6 +777,7 @@ impl LiteSVM {
             tx_result,
             signature,
             compute_units_consumed,
+            inner_instructions,
             return_data,
             included,
         } = if self.sigverify {
@@ -771,6 +788,7 @@ impl LiteSVM {
 
         let meta = TransactionMetadata {
             logs: self.log_collector.take().into_messages(),
+            inner_instructions,
             compute_units_consumed,
             return_data,
             signature,
@@ -793,12 +811,17 @@ impl LiteSVM {
         }
     }
 
-    pub fn simulate_transaction(&self, tx: impl Into<VersionedTransaction>) -> TransactionResult {
+    pub fn simulate_transaction(
+        &self,
+        tx: impl Into<VersionedTransaction>,
+    ) -> Result<(TransactionMetadata, Vec<(Pubkey, AccountSharedData)>), FailedTransactionMetadata>
+    {
         let ExecutionResult {
-            post_accounts: _,
+            post_accounts,
             tx_result,
             signature,
             compute_units_consumed,
+            inner_instructions,
             return_data,
             ..
         } = if self.sigverify {
@@ -811,14 +834,15 @@ impl LiteSVM {
         let meta = TransactionMetadata {
             signature,
             logs,
+            inner_instructions,
             compute_units_consumed,
             return_data,
         };
 
         if let Err(tx_err) = tx_result {
-            TransactionResult::Err(FailedTransactionMetadata { err: tx_err, meta })
+            Err(FailedTransactionMetadata { err: tx_err, meta })
         } else {
-            TransactionResult::Ok(meta)
+            Ok((meta, post_accounts))
         }
     }
 
@@ -919,11 +943,13 @@ fn execution_result_if_context(
     result: Result<(), TransactionError>,
     compute_units_consumed: u64,
 ) -> ExecutionResult {
-    let (signature, return_data, post_accounts) = execute_tx_helper(sanitized_tx, ctx);
+    let (signature, return_data, inner_instructions, post_accounts) =
+        execute_tx_helper(sanitized_tx, ctx);
     ExecutionResult {
         tx_result: result,
         signature,
         post_accounts,
+        inner_instructions,
         compute_units_consumed,
         return_data,
         included: true,
@@ -936,9 +962,11 @@ fn execute_tx_helper(
 ) -> (
     Signature,
     solana_sdk::transaction_context::TransactionReturnData,
+    InnerInstructionsList,
     Vec<(Pubkey, AccountSharedData)>,
 ) {
     let signature = sanitized_tx.signature().to_owned();
+    let inner_instructions = inner_instructions_list_from_instruction_trace(&ctx);
     let ExecutionRecord {
         accounts,
         return_data,
@@ -951,13 +979,16 @@ fn execute_tx_helper(
         .enumerate()
         .filter_map(|(idx, pair)| msg.is_writable(idx).then_some(pair))
         .collect();
-    (signature, return_data, post_accounts)
+    (signature, return_data, inner_instructions, post_accounts)
 }
 
 fn get_compute_budget_limits(
     sanitized_tx: &SanitizedTransaction,
 ) -> Result<ComputeBudgetLimits, ExecutionResult> {
-    let instructions = sanitized_tx.message().program_instructions_iter().map(|(program_id, ix)| (program_id, SVMInstruction::from(ix)));
+    let instructions = sanitized_tx
+        .message()
+        .program_instructions_iter()
+        .map(|(program_id, ix)| (program_id, SVMInstruction::from(ix)));
     process_compute_budget_instructions(instructions).map_err(|e| ExecutionResult {
         tx_result: Err(e),
         ..Default::default()
